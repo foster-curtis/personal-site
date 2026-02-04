@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
+import PromptMarquee from "@/components/chat/PromptMarquee";
+import { getPromptsForMarquee } from "@/lib/chat/prompts";
 
 interface Message {
   role: "user" | "assistant";
@@ -12,6 +14,9 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Get prompts for the marquee
+  const promptRows = useMemo(() => getPromptsForMarquee(), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +58,13 @@ export default function ChatPage() {
     }
   };
 
+  const handlePromptClick = (prompt: string) => {
+    setInput(prompt);
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
           Chat with AI
         </h1>
@@ -64,48 +73,27 @@ export default function ChatPage() {
         </p>
       </div>
 
+      {/* Prompt marquee - show when no messages */}
+      {messages.length === 0 && (
+        <div className="mb-6">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-2">
+            Click a suggestion or type your own question
+          </p>
+          <PromptMarquee
+            promptRows={promptRows}
+            onPromptClick={handlePromptClick}
+          />
+        </div>
+      )}
+
       <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-800">
         {/* Chat messages area */}
         <div className="h-[500px] overflow-y-auto p-6 space-y-4">
           {messages.length === 0 ? (
-            <div className="text-center text-zinc-500 dark:text-zinc-400 mt-8">
-              <p className="mb-4">Start a conversation...</p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {[
-                  "What is Foster's background?",
-                  "What technologies does Foster work with?",
-                  "Tell me about Foster's experience",
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => setInput(suggestion)}
-                    className="text-sm px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-              {/* Peer feedback prompt suggestions */}
-              <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
-                <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">
-                  Or ask about peer feedback:
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {[
-                    "What do other people say about Foster?",
-                    "How do colleagues describe Foster as a coworker?",
-                    "What are Foster's strengths according to peers?",
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setInput(suggestion)}
-                      className="text-sm px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <div className="flex items-center justify-center h-full">
+              <p className="text-zinc-400 dark:text-zinc-500 text-center">
+                Select a prompt above or type your question below to get started
+              </p>
             </div>
           ) : (
             messages.map((message, index) => (
