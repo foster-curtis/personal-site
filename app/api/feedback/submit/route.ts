@@ -1,17 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FeedbackFormSubmission } from "@/lib/db/types";
+import { logger, LogEvents } from "@/lib/logging";
+import {
+  validateFeedbackSubmission,
+  sanitizeStringObject,
+} from "@/lib/validation";
 
 /**
  * POST /api/feedback/submit
  * Public endpoint to submit anonymous feedback.
  * Uses admin client to bypass RLS for anonymous submissions.
+ *
+ * Security notes:
+ * - No PII is stored (no IP, email, or name)
+ * - Input is validated and sanitized
+ * - Token-based authentication prevents unauthorized access
  */
 export async function POST(request: NextRequest) {
-  try {
-    const body: FeedbackFormSubmission = await request.json();
+  const startTime = performance.now();
 
-    if (!body.token) {
+  try {
+    const body = await request.json();
+
+    // Validate input
+    const validation = validateFeedbackSubmission(body);
+    if (!validation.valid) {
+      logger.warn(
+        LogEvents.VALIDATION_ERROR,
+        "Feedback submission validation failed",
+        {
+          errors: validation.errors,
+        }
+      );
+      return NextResponse.json(
+        { error: "Invalid input", details: validation.errors },
+        { status: 400 }
+      );
+    }
+
+    const typedBody = body as FeedbackFormSubmission;
+
+    if (!typedBody.token) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
     }
 
@@ -87,12 +117,30 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (responderError) {
-      console.error("Error creating responder:", responderError);
+      logger.error(
+        LogEvents.FEEDBACK_SUBMISSION_FAILED,
+        responderError,
+        "Failed to create responder",
+        {
+          request_id: link.request_id,
+        }
+      );
       return NextResponse.json(
         { error: "Failed to create responder record" },
         { status: 500 }
       );
     }
+
+    // Sanitize input data before storing
+    const sanitizedMetadata = typedBody.metadata
+      ? sanitizeStringObject(typedBody.metadata as Record<string, unknown>, 500)
+      : {};
+    const sanitizedContent = typedBody.content
+      ? sanitizeStringObject(
+          typedBody.content as Record<string, unknown>,
+          10000
+        )
+      : {};
 
     // Create the feedback response
     const { data: response, error: responseError } = await supabase
@@ -100,8 +148,8 @@ export async function POST(request: NextRequest) {
       .insert({
         responder_id: responder.id,
         request_id: link.request_id,
-        metadata: body.metadata || {},
-        content: body.content || {},
+        metadata: sanitizedMetadata,
+        content: sanitizedContent,
         sentiment_score: null, // Will be set by AI analysis in Phase 5
         is_flagged: false,
         flag_reason: null,
@@ -110,7 +158,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (responseError) {
-      console.error("Error creating feedback response:", responseError);
+      logger.error(
+        LogEvents.FEEDBACK_SUBMISSION_FAILED,
+        responseError,
+        "Failed to save feedback response",
+        {
+          request_id: link.request_id,
+          responder_id: responder.id,
+        }
+      );
       return NextResponse.json(
         { error: "Failed to submit feedback" },
         { status: 500 }
@@ -124,9 +180,28 @@ export async function POST(request: NextRequest) {
       .eq("id", link.id);
 
     if (updateError) {
-      console.error("Error updating submission count:", updateError);
+      logger.warn(
+        "feedback.link.update_failed",
+        "Failed to update submission count",
+        {
+          link_id: link.id,
+        }
+      );
       // Don't fail the request - submission was successful
     }
+
+    // Log successful submission (no PII logged)
+    const durationMs = Math.round(performance.now() - startTime);
+    logger.info(
+      LogEvents.FEEDBACK_SUBMISSION,
+      "Feedback submitted successfully",
+      {
+        request_id: link.request_id,
+        response_id: response.id,
+        duration_ms: durationMs,
+        content_fields: Object.keys(sanitizedContent).length,
+      }
+    );
 
     return NextResponse.json(
       {
@@ -136,7 +211,11 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error in POST /api/feedback/submit:", error);
+    logger.error(
+      LogEvents.FEEDBACK_SUBMISSION_FAILED,
+      error,
+      "Unexpected error in feedback submission"
+    );
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

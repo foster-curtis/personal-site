@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { getPublicFeedbackSummary } from "@/lib/feedback/analysis";
+import { logger } from "@/lib/logging";
 
 /**
  * GET /api/feedback/public-summary
  * Public endpoint to get aggregated peer feedback summary.
  * Returns sanitized, aggregated summary only - no raw response text.
+ *
+ * Privacy guarantees:
+ * - Only returns aggregated summary text (no individual responses)
+ * - Requires minimum 2 respondents to prevent de-anonymization
+ * - No raw response content is ever exposed
  */
 export async function GET() {
+  const startTime = performance.now();
+
   try {
     const summary = await getPublicFeedbackSummary();
 
@@ -32,6 +40,16 @@ export async function GET() {
       );
     }
 
+    const durationMs = Math.round(performance.now() - startTime);
+    logger.info(
+      "feedback.public_summary.served",
+      "Public feedback summary served",
+      {
+        responder_count: summary.responder_count,
+        duration_ms: durationMs,
+      }
+    );
+
     return NextResponse.json({
       available: true,
       summary_text: summary.summary_text,
@@ -40,7 +58,11 @@ export async function GET() {
       generated_at: summary.generated_at,
     });
   } catch (error) {
-    console.error("Error in GET /api/feedback/public-summary:", error);
+    logger.error(
+      "feedback.public_summary.error",
+      error,
+      "Failed to get public feedback summary"
+    );
     return NextResponse.json(
       { error: "Failed to get feedback summary" },
       { status: 500 }

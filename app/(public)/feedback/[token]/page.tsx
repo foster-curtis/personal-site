@@ -113,14 +113,18 @@ export default function FeedbackFormPage() {
 
   const renderQuestion = (question: FeedbackQuestion) => {
     const value = values[question.id] || "";
+    const inputId = `question-${question.id}`;
+    const describedById = question.helpText ? `${inputId}-help` : undefined;
 
     switch (question.type) {
       case "select":
         return (
           <select
+            id={inputId}
             value={value}
             onChange={(e) => handleChange(question.id, e.target.value)}
             required={question.required}
+            aria-describedby={describedById}
             className="w-full px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select an option...</option>
@@ -135,10 +139,12 @@ export default function FeedbackFormPage() {
       case "textarea":
         return (
           <textarea
+            id={inputId}
             value={value}
             onChange={(e) => handleChange(question.id, e.target.value)}
             placeholder={question.placeholder}
             required={question.required}
+            aria-describedby={describedById}
             rows={4}
             className="w-full px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           />
@@ -147,11 +153,13 @@ export default function FeedbackFormPage() {
       default:
         return (
           <input
+            id={inputId}
             type="text"
             value={value}
             onChange={(e) => handleChange(question.id, e.target.value)}
             placeholder={question.placeholder}
             required={question.required}
+            aria-describedby={describedById}
             className="w-full px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         );
@@ -252,15 +260,23 @@ export default function FeedbackFormPage() {
             <div className="space-y-4">
               {metadataQuestions.map((question) => (
                 <div key={question.id}>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  <label
+                    htmlFor={`question-${question.id}`}
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
+                  >
                     {question.label}
                     {question.required && (
-                      <span className="text-red-500 ml-1">*</span>
+                      <span className="text-red-500 ml-1" aria-hidden="true">
+                        *
+                      </span>
                     )}
                   </label>
                   {renderQuestion(question)}
                   {question.helpText && (
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    <p
+                      id={`question-${question.id}-help`}
+                      className="mt-1 text-xs text-zinc-500 dark:text-zinc-400"
+                    >
                       {question.helpText}
                     </p>
                   )}
@@ -277,15 +293,23 @@ export default function FeedbackFormPage() {
             <div className="space-y-6">
               {contentQuestions.map((question) => (
                 <div key={question.id}>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  <label
+                    htmlFor={`question-${question.id}`}
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
+                  >
                     {question.label}
                     {question.required && (
-                      <span className="text-red-500 ml-1">*</span>
+                      <span className="text-red-500 ml-1" aria-hidden="true">
+                        *
+                      </span>
                     )}
                   </label>
                   {renderQuestion(question)}
                   {question.helpText && (
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    <p
+                      id={`question-${question.id}-help`}
+                      className="mt-1 text-xs text-zinc-500 dark:text-zinc-400"
+                    >
                       {question.helpText}
                     </p>
                   )}
@@ -295,12 +319,64 @@ export default function FeedbackFormPage() {
           </div>
 
           {/* Privacy Notice */}
-          <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg p-4">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              <strong>Privacy:</strong> Your response is completely anonymous.
-              We do not collect your name, email, IP address, or any identifying
-              information. Only aggregated summaries will ever be shared.
-            </p>
+          <div
+            className="bg-zinc-100 dark:bg-zinc-800 rounded-lg p-4 space-y-3"
+            role="region"
+            aria-label="Privacy information"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="text-green-600 dark:text-green-400 text-xl"
+                aria-hidden="true"
+              >
+                🔒
+              </span>
+              <div>
+                <p className="font-medium text-zinc-700 dark:text-zinc-300">
+                  Your Privacy is Protected
+                </p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+                  Your response is <strong>completely anonymous</strong>.
+                  Here&apos;s what that means:
+                </p>
+              </div>
+            </div>
+            <ul className="text-sm text-zinc-600 dark:text-zinc-400 space-y-1 ml-9">
+              <li className="flex items-start gap-2">
+                <span className="text-green-500" aria-hidden="true">
+                  ✓
+                </span>
+                <span>
+                  We do not collect your name, email, or any contact information
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500" aria-hidden="true">
+                  ✓
+                </span>
+                <span>
+                  We do not store your IP address or browser fingerprint
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500" aria-hidden="true">
+                  ✓
+                </span>
+                <span>
+                  Only AI-generated summaries (never raw responses) are shared
+                  publicly
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500" aria-hidden="true">
+                  ✓
+                </span>
+                <span>
+                  Summaries require at least 2 respondents to prevent
+                  identification
+                </span>
+              </li>
+            </ul>
           </div>
 
           {/* Submit Button */}
