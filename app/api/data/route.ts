@@ -94,6 +94,8 @@ export async function POST(request: NextRequest) {
         title: body.title,
         body_text: body.body_text,
         source_question_id: body.source_question_id || null,
+        // Resume blocks are important by default
+        is_important: body.type === "resume",
       })
       .select()
       .single();

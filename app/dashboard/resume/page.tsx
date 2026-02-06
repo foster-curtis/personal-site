@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ContentBlock, ContentBlockType } from "@/lib/db/types";
+import { trackImportanceToggled } from "@/lib/analytics";
 
 type EditorMode = "list" | "create" | "edit";
 
@@ -19,6 +20,7 @@ export default function ResumePage() {
   const [formBody, setFormBody] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [autoEmbed, setAutoEmbed] = useState(true);
+  const [updatingImportance, setUpdatingImportance] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBlocks();
@@ -152,6 +154,42 @@ export default function ResumePage() {
       fetchBlocks();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete");
+    }
+  };
+
+  const toggleImportance = async (blockId: string, newValue: boolean) => {
+    // Find the block to get its type for tracking
+    const block = blocks.find((b) => b.id === blockId);
+
+    setUpdatingImportance(blockId);
+    try {
+      const res = await fetch(`/api/data/${blockId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_important: newValue }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update");
+      }
+
+      // Track importance toggle
+      if (block) {
+        trackImportanceToggled(block.type, newValue);
+      }
+
+      // Update local state
+      setBlocks((prev) =>
+        prev.map((b) =>
+          b.id === blockId ? { ...b, is_important: newValue } : b
+        )
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to update importance"
+      );
+    } finally {
+      setUpdatingImportance(null);
     }
   };
 
@@ -370,6 +408,11 @@ export default function ResumePage() {
                     <span className="text-xs text-zinc-400">
                       {new Date(block.created_at).toLocaleDateString()}
                     </span>
+                    {block.is_important && (
+                      <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded">
+                        Priority
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-1">
                     {block.title}
@@ -378,7 +421,27 @@ export default function ResumePage() {
                     {block.body_text}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => toggleImportance(block.id, !block.is_important)}
+                    disabled={updatingImportance === block.id}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      block.is_important
+                        ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50"
+                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                    } disabled:opacity-50`}
+                    title={
+                      block.is_important
+                        ? "Click to remove priority (will be less prominent in AI responses)"
+                        : "Click to prioritize (will be more prominent in AI responses)"
+                    }
+                  >
+                    {updatingImportance === block.id
+                      ? "..."
+                      : block.is_important
+                      ? "Prioritized"
+                      : "Prioritize"}
+                  </button>
                   <button
                     onClick={() => handleEdit(block)}
                     className="px-3 py-1 text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"

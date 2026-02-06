@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Prompt } from "@/lib/db/types";
+import { trackPromptAnswered, trackPromptsRefreshed } from "@/lib/analytics";
 
 export default function PromptsPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
@@ -11,6 +12,7 @@ export default function PromptsPage() {
   const [answer, setAnswer] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchPrompts();
@@ -54,6 +56,33 @@ export default function PromptsPage() {
     }
   };
 
+  const refreshPrompts = async () => {
+    if (!confirm("Replace current questions with new ones?")) return;
+
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/prompts/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 3 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Track prompts refreshed
+      trackPromptsRefreshed();
+
+      await fetchPrompts();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to refresh prompts"
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleAnswer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activePrompt || !answer.trim() || isSubmitting) return;
@@ -73,6 +102,9 @@ export default function PromptsPage() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      // Track prompt answered
+      trackPromptAnswered();
 
       setActivePrompt(null);
       setAnswer("");
@@ -171,15 +203,27 @@ export default function PromptsPage() {
             Answer these questions to help the AI better represent you.
           </p>
         </div>
-        {prompts.length < 3 && (
-          <button
-            onClick={() => generatePrompts(3 - prompts.length)}
-            disabled={isGenerating}
-            className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 disabled:opacity-50 transition-colors text-sm"
-          >
-            {isGenerating ? "Generating..." : "Get More Questions"}
-          </button>
-        )}
+        <div className="flex gap-2">
+          {prompts.length > 0 && (
+            <button
+              onClick={refreshPrompts}
+              disabled={isRefreshing || isGenerating}
+              className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 disabled:opacity-50 transition-colors text-sm"
+              title="Replace current questions with new ones"
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh Questions"}
+            </button>
+          )}
+          {prompts.length < 3 && (
+            <button
+              onClick={() => generatePrompts(3 - prompts.length)}
+              disabled={isGenerating || isRefreshing}
+              className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 disabled:opacity-50 transition-colors text-sm"
+            >
+              {isGenerating ? "Generating..." : "Get More Questions"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

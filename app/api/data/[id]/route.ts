@@ -89,6 +89,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.type !== undefined) updateData.type = body.type;
     if (body.title !== undefined) updateData.title = body.title;
     if (body.body_text !== undefined) updateData.body_text = body.body_text;
+    if (body.is_important !== undefined) updateData.is_important = body.is_important;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(

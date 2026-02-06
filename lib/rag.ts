@@ -32,31 +32,81 @@ export async function retrieveRelevantChunks(
 }
 
 /**
- * Get content block titles for attribution
+ * Block metadata for RAG context building
  */
-export async function getBlockTitles(
+export interface BlockMetadata {
+  title: string;
+  is_important: boolean;
+}
+
+/**
+ * Get content block metadata (title and importance) for attribution and prioritization
+ */
+export async function getBlockMetadata(
   blockIds: string[]
-): Promise<Map<string, string>> {
+): Promise<Map<string, BlockMetadata>> {
   if (blockIds.length === 0) return new Map();
 
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("content_blocks")
-    .select("id, title")
+    .select("id, title, is_important")
     .in("id", blockIds);
 
   if (error) {
-    console.error("Error fetching block titles:", error);
+    console.error("Error fetching block metadata:", error);
     return new Map();
   }
 
-  const titleMap = new Map<string, string>();
+  const metadataMap = new Map<string, BlockMetadata>();
   for (const block of data || []) {
-    titleMap.set(block.id, block.title);
+    metadataMap.set(block.id, {
+      title: block.title,
+      is_important: block.is_important ?? false,
+    });
   }
 
+  return metadataMap;
+}
+
+/**
+ * Get content block titles for attribution (legacy helper, uses getBlockMetadata)
+ */
+export async function getBlockTitles(
+  blockIds: string[]
+): Promise<Map<string, string>> {
+  const metadata = await getBlockMetadata(blockIds);
+  const titleMap = new Map<string, string>();
+  for (const [id, meta] of metadata) {
+    titleMap.set(id, meta.title);
+  }
   return titleMap;
+}
+
+/**
+ * Prioritize chunks by block importance, then by similarity
+ * Chunks from important blocks come first, then sorted by similarity within each group
+ */
+export function prioritizeChunks(
+  chunks: EmbeddingMatch[],
+  blockMetadata: Map<string, BlockMetadata>,
+  limit: number = 5
+): EmbeddingMatch[] {
+  // Sort: important blocks first, then by similarity descending
+  const sorted = [...chunks].sort((a, b) => {
+    const aImportant = blockMetadata.get(a.content_block_id)?.is_important ?? false;
+    const bImportant = blockMetadata.get(b.content_block_id)?.is_important ?? false;
+
+    // Important blocks come first
+    if (aImportant && !bImportant) return -1;
+    if (!aImportant && bImportant) return 1;
+
+    // Within same importance level, sort by similarity descending
+    return b.similarity - a.similarity;
+  });
+
+  return sorted.slice(0, limit);
 }
 
 /**

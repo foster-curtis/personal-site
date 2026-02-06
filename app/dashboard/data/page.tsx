@@ -7,6 +7,7 @@ import {
   Prompt,
   FileRecord,
 } from "@/lib/db/types";
+import { trackImportanceToggled } from "@/lib/analytics";
 
 type TabType = "all" | "resume" | "story" | "qa" | "files";
 
@@ -154,6 +155,39 @@ export default function DataPage() {
       window.open(data.downloadUrl, "_blank");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download file");
+    }
+  };
+
+  const toggleImportance = async (blockId: string, newValue: boolean) => {
+    // Find the block to get its type for tracking
+    const block = blocks.find((b) => b.id === blockId);
+
+    try {
+      const res = await fetch(`/api/data/${blockId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_important: newValue }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update");
+      }
+
+      // Track importance toggle
+      if (block) {
+        trackImportanceToggled(block.type, newValue);
+      }
+
+      // Update local state
+      setBlocks((prev) =>
+        prev.map((b) =>
+          b.id === blockId ? { ...b, is_important: newValue } : b
+        )
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to update importance"
+      );
     }
   };
 
@@ -369,6 +403,7 @@ export default function DataPage() {
                         key={block.id}
                         block={block}
                         typeColors={typeColors}
+                        onToggleImportance={toggleImportance}
                       />
                     ))}
                   </div>
@@ -394,6 +429,7 @@ export default function DataPage() {
                         key={block.id}
                         block={block}
                         typeColors={typeColors}
+                        onToggleImportance={toggleImportance}
                       />
                     ))}
                   </div>
@@ -494,6 +530,7 @@ export default function DataPage() {
                     key={block.id}
                     block={block}
                     typeColors={typeColors}
+                    onToggleImportance={toggleImportance}
                   />
                 ))
               )}
@@ -520,12 +557,24 @@ export default function DataPage() {
 function ContentBlockCard({
   block,
   typeColors,
+  onToggleImportance,
 }: {
   block: ContentBlock;
   typeColors: Record<ContentBlockType, string>;
+  onToggleImportance?: (blockId: string, newValue: boolean) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const isLong = block.body_text.length > 300;
+  const showImportanceToggle =
+    onToggleImportance && (block.type === "resume" || block.type === "story");
+
+  const handleImportanceToggle = async () => {
+    if (!onToggleImportance || isUpdating) return;
+    setIsUpdating(true);
+    await onToggleImportance(block.id, !block.is_important);
+    setIsUpdating(false);
+  };
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4">
@@ -535,6 +584,11 @@ function ContentBlockCard({
             <span className="text-xs text-zinc-400">
               {new Date(block.created_at).toLocaleDateString()}
             </span>
+            {block.is_important && (
+              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded">
+                Priority
+              </span>
+            )}
           </div>
           <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
             {block.title}
@@ -553,6 +607,30 @@ function ContentBlockCard({
             </button>
           )}
         </div>
+        {showImportanceToggle && (
+          <div className="flex-shrink-0">
+            <button
+              onClick={handleImportanceToggle}
+              disabled={isUpdating}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                block.is_important
+                  ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+              } disabled:opacity-50`}
+              title={
+                block.is_important
+                  ? "Click to remove priority (will be less prominent in AI responses)"
+                  : "Click to prioritize (will be more prominent in AI responses)"
+              }
+            >
+              {isUpdating
+                ? "..."
+                : block.is_important
+                ? "Prioritized"
+                : "Prioritize"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

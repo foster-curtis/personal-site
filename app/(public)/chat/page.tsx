@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
 import PromptMarquee from "@/components/chat/PromptMarquee";
 import { getPromptsForMarquee } from "@/lib/chat/prompts";
+import { trackChatMessage, trackChatResponse } from "@/lib/analytics";
 
 interface Message {
   role: "user" | "assistant";
@@ -22,10 +23,14 @@ export default function ChatPage() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = { role: "user", content: input };
+    const messageText = input;
+    const userMessage: Message = { role: "user", content: messageText };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+
+    // Track chat message sent
+    trackChatMessage(messageText.length);
 
     try {
       const response = await fetch("/api/chat", {
@@ -33,7 +38,7 @@ export default function ChatPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ message: messageText }),
       });
 
       if (!response.ok) {
@@ -46,6 +51,9 @@ export default function ChatPage() {
         content: data.response,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Track chat response received
+      trackChatResponse(data.response.length, data.sources?.length || 0);
     } catch (error) {
       console.error("Error:", error);
       const errorMessage: Message = {

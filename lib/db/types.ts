@@ -9,6 +9,7 @@ export interface ContentBlock {
   title: string;
   body_text: string;
   source_question_id: string | null;
+  is_important: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +25,7 @@ export interface UpdateContentBlockInput {
   type?: ContentBlockType;
   title?: string;
   body_text?: string;
+  is_important?: boolean;
 }
 
 // Embedding types for Stage 3

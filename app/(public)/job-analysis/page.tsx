@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { trackJobAnalysis } from "@/lib/analytics";
 
 interface Strength {
   area: string;
@@ -67,6 +68,8 @@ export default function JobAnalysisPage() {
 
       if (data.analysis) {
         setAnalysis(data.analysis);
+        // Track job analysis completed
+        trackJobAnalysis();
       } else if (data.rawResponse) {
         setError(
           "Analysis completed but couldn't be formatted. Raw response available in console."

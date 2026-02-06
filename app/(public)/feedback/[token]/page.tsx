@@ -8,6 +8,7 @@ import {
   getContentQuestions,
   FeedbackQuestion,
 } from "@/lib/feedback/questions";
+import { trackFeedbackSubmitted } from "@/lib/analytics";
 
 interface FormData {
   request: {
@@ -100,6 +101,9 @@ export default function FeedbackFormPage() {
       if (!res.ok) {
         throw new Error(data.error || "Failed to submit feedback");
       }
+
+      // Track feedback submitted (with relationship type if provided)
+      trackFeedbackSubmitted(metadata.relationship);
 
       setIsSubmitted(true);
     } catch (err) {

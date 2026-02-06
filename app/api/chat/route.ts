@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateWithContext } from "@/lib/gemini/client";
 import {
   retrieveRelevantChunks,
-  getBlockTitles,
+  getBlockMetadata,
   formatContextFromChunks,
   buildSystemPrompt,
   retrievePeerFeedbackSummary,
   formatPeerFeedbackContext,
+  prioritizeChunks,
 } from "@/lib/rag";
 
 export async function POST(request: NextRequest) {
@@ -20,17 +21,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Retrieve relevant chunks using RAG
-    const chunks = await retrieveRelevantChunks(message, 5, 0.3);
+    // 1. Retrieve more chunks than needed for prioritization
+    const allChunks = await retrieveRelevantChunks(message, 10, 0.3);
 
-    // 2. Get block titles for attribution
-    const blockIds = [...new Set(chunks.map((c) => c.content_block_id))];
-    const blockTitles = await getBlockTitles(blockIds);
+    // 2. Get block metadata (title + importance) for prioritization
+    const blockIds = [...new Set(allChunks.map((c) => c.content_block_id))];
+    const blockMetadata = await getBlockMetadata(blockIds);
 
-    // 3. Format context from chunks
+    // 3. Prioritize chunks: important blocks first, then by similarity
+    const chunks = prioritizeChunks(allChunks, blockMetadata, 5);
+
+    // 4. Build title map for context formatting
+    const blockTitles = new Map<string, string>();
+    for (const [id, meta] of blockMetadata) {
+      blockTitles.set(id, meta.title);
+    }
+
+    // 5. Format context from prioritized chunks
     let context = formatContextFromChunks(chunks, blockTitles);
 
-    // 4. Retrieve and add peer feedback summary if available
+    // 6. Retrieve and add peer feedback summary if available
     const peerFeedback = await retrievePeerFeedbackSummary();
     const hasPeerFeedback = peerFeedback !== null;
 
@@ -39,10 +49,10 @@ export async function POST(request: NextRequest) {
       context = `${context}\n\n${feedbackContext}`;
     }
 
-    // 5. Build system prompt (with peer feedback awareness if available)
+    // 7. Build system prompt (with peer feedback awareness if available)
     const systemPrompt = buildSystemPrompt("Foster Curtis", hasPeerFeedback);
 
-    // 6. Generate response with context
+    // 8. Generate response with context
     const response = await generateWithContext(systemPrompt, context, message);
 
     return NextResponse.json({
