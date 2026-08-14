@@ -5,6 +5,7 @@ import {
   FeedbackRequestWithStats,
   FeedbackAnalysisResult,
 } from "@/lib/db/types";
+import { getSentimentColor, getStatusBadge } from "@/lib/format";
 
 export default function FeedbackDashboardPage() {
   const [requests, setRequests] = useState<FeedbackRequestWithStats[]>([]);
@@ -149,41 +150,12 @@ export default function FeedbackDashboardPage() {
     }
   };
 
-  const getSentimentColor = (score: number | null) => {
-    if (score === null) return "text-zinc-400";
-    if (score >= 7) return "text-green-600 dark:text-green-400";
-    if (score >= 4) return "text-yellow-600 dark:text-yellow-400";
-    return "text-red-600 dark:text-red-400";
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
-  };
-
-  const getStatusBadge = (request: FeedbackRequestWithStats) => {
-    if (!request.is_active) {
-      return (
-        <span className="px-2 py-0.5 text-xs rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-          Inactive
-        </span>
-      );
-    }
-    if (request.expires_at && new Date(request.expires_at) < new Date()) {
-      return (
-        <span className="px-2 py-0.5 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
-          Expired
-        </span>
-      );
-    }
-    return (
-      <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-        Active
-      </span>
-    );
   };
 
   if (isLoading) {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { trackJobAnalysis } from "@/lib/analytics";
+import { getMatchColor, getScoreColor } from "@/lib/format";
 
 interface Strength {
   area: string;
@@ -81,23 +82,6 @@ export default function JobAnalysisPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const getMatchColor = (match: string) => {
-    switch (match) {
-      case "strong":
-        return "text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30";
-      case "moderate":
-        return "text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30";
-      default:
-        return "text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30";
-    }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 70) return "text-green-600 dark:text-green-400";
-    if (score >= 50) return "text-yellow-600 dark:text-yellow-400";
-    return "text-orange-600 dark:text-orange-400";
   };
 
   return (

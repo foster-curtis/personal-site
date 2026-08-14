@@ -86,7 +86,7 @@ export async function fetchOwnerContentBlocks(): Promise<ContentBlock[]> {
 /**
  * Build the prompt for generating the About summary
  */
-function buildAboutPrompt(blocks: ContentBlock[], ownerName: string): string {
+export function buildAboutPrompt(blocks: ContentBlock[], ownerName: string): string {
   // Format the content blocks into context
   const context = blocks
     .map(

@@ -14,7 +14,7 @@ const questionLabels: Record<string, string> = Object.fromEntries(
   FEEDBACK_QUESTIONS.map((q) => [q.id, q.label])
 );
 
-interface AnalysisInput {
+export interface AnalysisInput {
   responses: FeedbackResponse[];
   ownerName: string;
 }
@@ -37,7 +37,7 @@ interface LLMAnalysisOutput {
 /**
  * Build the prompt for feedback analysis
  */
-function buildAnalysisPrompt(input: AnalysisInput): string {
+export function buildAnalysisPrompt(input: AnalysisInput): string {
   const { responses, ownerName } = input;
 
   // Format each response for the LLM
