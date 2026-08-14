@@ -13,9 +13,11 @@
 | Analytics | PostHog (`posthog-js`), client-side only, opt-in via env var |
 | Markdown/LaTeX rendering | `react-markdown` + `remark-gfm` + `remark-math` + `rehype-katex` (chat assistant messages only) |
 
-There is no test suite, no CI config, and no ORM — all database access goes
-through the Supabase JS client with hand-written `.select()`/`.insert()`
-chains and manually maintained TypeScript types in `lib/db/types.ts`.
+There is a Vitest (unit/component/route) + Playwright (e2e) test suite and a pgTAP suite
+for RLS/schema (`supabase/tests/`), but no CI config yet and no ORM — all database access
+goes through the Supabase JS client with hand-written `.select()`/`.insert()` chains and
+manually maintained TypeScript types in `lib/db/types.ts`. See `AGENTS.md`'s testing rule
+and `.claude/rules/testing.md` for where new tests go.
 
 ## Folder layout
 

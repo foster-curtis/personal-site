@@ -29,6 +29,11 @@ files, and manage feedback requests + AI analysis.
 | [ai-pipeline.md](./ai-pipeline.md) | RAG chat, embeddings, About-page generation, job comparison, feedback analysis — all the Gemini call sites |
 | [frontend.md](./frontend.md) | Route map, page-by-page behavior, shared components, styling conventions |
 
+## For AI coding agents
+
+Cursor and Claude Code instructions — including the safety-critical facts every change
+should respect — live in [`AGENTS.md`](../AGENTS.md) at the repo root.
+
 ## Conventions used across these docs
 
 - File paths are repo-relative, e.g. `lib/auth.ts`.

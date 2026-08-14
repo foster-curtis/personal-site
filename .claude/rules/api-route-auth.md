@@ -1,0 +1,29 @@
+---
+paths: ["app/api/**/*.ts"]
+---
+
+# API route auth pattern
+
+There is no shared auth middleware for API routes — `middleware.ts` only refreshes the
+session cookie, it does not gate anything. Every owner-only route independently re-checks
+auth at the top of **every exported handler** (`GET`, `POST`, `PATCH`, `DELETE` each need
+their own copy — the check is not hoisted or shared):
+
+```ts
+const user = await getUser();
+if (!user || !isOwner(user)) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+```
+
+This is the confirmed pattern used across the codebase (see `app/api/data/route.ts`). Copy
+it verbatim into any new owner-only handler.
+
+## Admin-client implication
+
+If a route uses `createAdminClient()` (`lib/supabase/admin.ts`) instead of the RLS-backed
+client, **RLS gives zero protection on that route**. Whatever check substitutes for it —
+the owner check above, or an invariant like the peer-feedback 2-responder floor for public
+routes — *is* the entire authorization boundary for that data. There is no fallback.
+
+See `docs/auth-and-security.md` and `docs/api-reference.md` for the full picture.
