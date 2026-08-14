@@ -53,9 +53,7 @@ function LoginForm() {
         if (error) {
           setError(error.message);
         } else if (data.user) {
-          // Check if owner
-          const ownerEmail = process.env.NEXT_PUBLIC_OWNER_EMAIL || "";
-          // We can't access server env vars here, so redirect and let server handle it
+          // We can't check owner status client-side, so redirect and let the server handle it
           router.push("/dashboard");
           router.refresh();
         }

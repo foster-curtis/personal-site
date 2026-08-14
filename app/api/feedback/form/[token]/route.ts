@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FeedbackLink, FeedbackRequest } from "@/lib/db/types";
 
 /**
  * GET /api/feedback/form/[token]

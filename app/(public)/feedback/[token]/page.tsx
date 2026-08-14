@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import {
-  FEEDBACK_QUESTIONS,
   getMetadataQuestions,
   getContentQuestions,
   FeedbackQuestion,
@@ -38,11 +37,7 @@ export default function FeedbackFormPage() {
   // Form values
   const [values, setValues] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    fetchFormData();
-  }, [token]);
-
-  const fetchFormData = async () => {
+  const fetchFormData = useCallback(async () => {
     try {
       const res = await fetch(`/api/feedback/form/${token}`);
       const data = await res.json();
@@ -57,7 +52,11 @@ export default function FeedbackFormPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchFormData();
+  }, [fetchFormData]);
 
   const handleChange = (id: string, value: string) => {
     setValues((prev) => ({ ...prev, [id]: value }));
@@ -226,7 +225,6 @@ export default function FeedbackFormPage() {
 
   const metadataQuestions = getMetadataQuestions();
   const contentQuestions = getContentQuestions();
-  const ownerName = process.env.NEXT_PUBLIC_OWNER_NAME || "this person";
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black">

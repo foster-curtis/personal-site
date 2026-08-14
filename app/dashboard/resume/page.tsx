@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ContentBlock, ContentBlockType } from "@/lib/db/types";
 import { trackImportanceToggled } from "@/lib/analytics";
 
@@ -22,11 +22,7 @@ export default function ResumePage() {
   const [autoEmbed, setAutoEmbed] = useState(true);
   const [updatingImportance, setUpdatingImportance] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchBlocks();
-  }, [filterType]);
-
-  const fetchBlocks = async () => {
+  const fetchBlocks = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -45,7 +41,11 @@ export default function ResumePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filterType]);
+
+  useEffect(() => {
+    fetchBlocks();
+  }, [fetchBlocks]);
 
   const resetForm = () => {
     setFormType("resume");

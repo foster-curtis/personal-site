@@ -37,7 +37,7 @@ export async function GET(
       );
     }
 
-    // Get the latest summary
+    // Get the latest summary (PGRST116 = no rows, expected when none exists yet)
     const { data: summary, error: summaryError } = await supabase
       .from("feedback_summaries")
       .select("*")
@@ -45,6 +45,10 @@ export async function GET(
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
+
+    if (summaryError && summaryError.code !== "PGRST116") {
+      console.error("Error fetching summary:", summaryError);
+    }
 
     // Get response stats
     const { data: responses, error: responsesError } = await supabase

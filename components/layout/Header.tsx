@@ -28,7 +28,7 @@ export default function Header() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabase.auth]);
 
   const fetchSession = async () => {
     try {

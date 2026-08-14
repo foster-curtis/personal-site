@@ -8,6 +8,7 @@ import {
   FileRecord,
 } from "@/lib/db/types";
 import { trackImportanceToggled } from "@/lib/analytics";
+import { formatFileSize, getFileIcon } from "@/lib/format";
 
 type TabType = "all" | "resume" | "story" | "qa" | "files";
 
@@ -18,7 +19,6 @@ interface ContentBlockWithPrompt extends ContentBlock {
 export default function DataPage() {
   const [blocks, setBlocks] = useState<ContentBlockWithPrompt[]>([]);
   const [files, setFiles] = useState<FileRecord[]>([]);
-  const [prompts, setPrompts] = useState<Map<string, Prompt>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("all");
@@ -65,7 +65,6 @@ export default function DataPage() {
       // Build prompts map by ID for quick lookup
       const promptsMap = new Map<string, Prompt>();
       allPrompts.forEach((p: Prompt) => promptsMap.set(p.id, p));
-      setPrompts(promptsMap);
 
       // Attach prompt info to Q&A blocks
       const blocksWithPrompts: ContentBlockWithPrompt[] = (
@@ -145,7 +144,7 @@ export default function DataPage() {
     }
   };
 
-  const handleFileDownload = async (fileId: string, fileName: string) => {
+  const handleFileDownload = async (fileId: string) => {
     try {
       const res = await fetch(`/api/files/${fileId}`);
       const data = await res.json();
@@ -216,20 +215,6 @@ export default function DataPage() {
     resume: blocks.filter((b) => b.type === "resume"),
     story: blocks.filter((b) => b.type === "story"),
     qa: blocks.filter((b) => b.type === "qa"),
-  };
-
-  const formatFileSize = (bytes: number | null) => {
-    if (!bytes) return "Unknown size";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType === "application/pdf") return "📄";
-    if (mimeType.startsWith("image/")) return "🖼️";
-    if (mimeType === "text/plain") return "📝";
-    return "📎";
   };
 
   if (isLoading) {
@@ -359,7 +344,7 @@ export default function DataPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleFileDownload(file.id, file.name)}
+                      onClick={() => handleFileDownload(file.id)}
                       className="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                     >
                       Download
@@ -402,7 +387,6 @@ export default function DataPage() {
                       <ContentBlockCard
                         key={block.id}
                         block={block}
-                        typeColors={typeColors}
                         onToggleImportance={toggleImportance}
                       />
                     ))}
@@ -428,7 +412,6 @@ export default function DataPage() {
                       <ContentBlockCard
                         key={block.id}
                         block={block}
-                        typeColors={typeColors}
                         onToggleImportance={toggleImportance}
                       />
                     ))}
@@ -451,11 +434,7 @@ export default function DataPage() {
                   </h2>
                   <div className="space-y-3">
                     {groupedBlocks.qa.map((block) => (
-                      <QABlockCard
-                        key={block.id}
-                        block={block}
-                        typeColors={typeColors}
-                      />
+                      <QABlockCard key={block.id} block={block} />
                     ))}
                   </div>
                 </section>
@@ -501,11 +480,7 @@ export default function DataPage() {
                 </div>
               ) : (
                 filteredBlocks.map((block) => (
-                  <QABlockCard
-                    key={block.id}
-                    block={block}
-                    typeColors={typeColors}
-                  />
+                  <QABlockCard key={block.id} block={block} />
                 ))
               )}
             </div>
@@ -529,7 +504,6 @@ export default function DataPage() {
                   <ContentBlockCard
                     key={block.id}
                     block={block}
-                    typeColors={typeColors}
                     onToggleImportance={toggleImportance}
                   />
                 ))
@@ -556,11 +530,9 @@ export default function DataPage() {
 // Component for displaying a regular content block
 function ContentBlockCard({
   block,
-  typeColors,
   onToggleImportance,
 }: {
   block: ContentBlock;
-  typeColors: Record<ContentBlockType, string>;
   onToggleImportance?: (blockId: string, newValue: boolean) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -639,10 +611,8 @@ function ContentBlockCard({
 // Component for displaying Q&A with the original prompt
 function QABlockCard({
   block,
-  typeColors,
 }: {
   block: ContentBlockWithPrompt;
-  typeColors: Record<ContentBlockType, string>;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isLong = block.body_text.length > 300;

@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, isOwner } from "@/lib/auth";
-import {
-  FeedbackRequest,
-  CreateFeedbackRequestInput,
-  FeedbackLink,
-} from "@/lib/db/types";
+import { CreateFeedbackRequestInput, FeedbackLink } from "@/lib/db/types";
 import { generateFeedbackToken } from "@/lib/feedback/tokens";
 
 /**
  * GET /api/feedback/requests
  * List all feedback requests for the owner with summary stats.
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const user = await getUser();
 

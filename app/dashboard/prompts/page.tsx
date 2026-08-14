@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Prompt } from "@/lib/db/types";
 import { trackPromptAnswered, trackPromptsRefreshed } from "@/lib/analytics";
 
@@ -14,11 +14,13 @@ export default function PromptsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchPrompts();
-  }, []);
+  // fetchPrompts and generatePrompts call each other; a ref breaks the
+  // circular dependency so fetchPrompts can stay stable for the mount effect.
+  const generatePromptsRef = useRef<(count?: number) => Promise<void>>(
+    async () => {}
+  );
 
-  const fetchPrompts = async () => {
+  const fetchPrompts = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -29,32 +31,43 @@ export default function PromptsPage() {
 
       // Auto-generate prompts if none exist
       if (data.prompts?.length === 0) {
-        await generatePrompts(3);
+        await generatePromptsRef.current(3);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load prompts");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const generatePrompts = async (count: number = 1) => {
-    setIsGenerating(true);
-    try {
-      const res = await fetch("/api/prompts/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count }),
-      });
-      if (res.ok) {
-        await fetchPrompts();
+  const generatePrompts = useCallback(
+    async (count: number = 1) => {
+      setIsGenerating(true);
+      try {
+        const res = await fetch("/api/prompts/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ count }),
+        });
+        if (res.ok) {
+          await fetchPrompts();
+        }
+      } catch (err) {
+        console.error("Failed to generate prompts:", err);
+      } finally {
+        setIsGenerating(false);
       }
-    } catch (err) {
-      console.error("Failed to generate prompts:", err);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+    },
+    [fetchPrompts]
+  );
+
+  useEffect(() => {
+    generatePromptsRef.current = generatePrompts;
+  }, [generatePrompts]);
+
+  useEffect(() => {
+    fetchPrompts();
+  }, [fetchPrompts]);
 
   const refreshPrompts = async () => {
     if (!confirm("Replace current questions with new ones?")) return;

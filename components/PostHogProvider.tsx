@@ -25,7 +25,7 @@ export default function PostHogProvider({
         // Respect Do Not Track
         respect_dnt: true,
         // Disable in development unless explicitly enabled
-        loaded: (posthog) => {
+        loaded: () => {
           if (process.env.NODE_ENV === "development") {
             // Uncomment the line below to enable PostHog in development
             // posthog.debug();
