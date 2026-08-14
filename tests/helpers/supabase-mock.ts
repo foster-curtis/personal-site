@@ -14,6 +14,8 @@
  *   // ... call the route handler, which does two sequential `.from()` calls ...
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export interface PostgrestErrorLike {
   message: string;
   details: string;
@@ -41,6 +43,11 @@ function emptyResult<T = unknown>(): QueuedResult<T> {
   return { data: null, error: null };
 }
 
+export interface RecordedCall {
+  method: string;
+  args: unknown[];
+}
+
 /**
  * A single table's queue of results. Every terminal method in a `.from(table)` chain
  * (`.single()`, or awaiting the builder directly) pops the next queued result — call
@@ -48,6 +55,7 @@ function emptyResult<T = unknown>(): QueuedResult<T> {
  */
 class TableQueue {
   private queue: QueuedResult[] = [];
+  readonly calls: RecordedCall[] = [];
 
   push(result: QueuedResult) {
     this.queue.push(result);
@@ -62,6 +70,10 @@ class TableQueue {
       );
     }
     return next;
+  }
+
+  record(method: string, args: unknown[]) {
+    this.calls.push({ method, args });
   }
 }
 
@@ -83,37 +95,48 @@ class MockQueryBuilder implements PromiseLike<QueuedResult> {
     return this.resolved;
   }
 
-  select(_columns?: string, _options?: { count?: string; head?: boolean }): this {
+  select(columns?: string, options?: { count?: string; head?: boolean }): this {
+    this.queue.record("select", [columns, options]);
     return this;
   }
-  eq(_column: string, _value: unknown): this {
+  eq(column: string, value: unknown): this {
+    this.queue.record("eq", [column, value]);
     return this;
   }
-  neq(_column: string, _value: unknown): this {
+  neq(column: string, value: unknown): this {
+    this.queue.record("neq", [column, value]);
     return this;
   }
-  in(_column: string, _values: unknown[]): this {
+  in(column: string, values: unknown[]): this {
+    this.queue.record("in", [column, values]);
     return this;
   }
-  order(_column: string, _options?: { ascending?: boolean }): this {
+  order(column: string, options?: { ascending?: boolean }): this {
+    this.queue.record("order", [column, options]);
     return this;
   }
-  limit(_count: number): this {
+  limit(count: number): this {
+    this.queue.record("limit", [count]);
     return this;
   }
-  insert(_values: unknown): this {
+  insert(values: unknown): this {
+    this.queue.record("insert", [values]);
     return this;
   }
-  update(_values: unknown): this {
+  update(values: unknown): this {
+    this.queue.record("update", [values]);
     return this;
   }
   delete(): this {
+    this.queue.record("delete", []);
     return this;
   }
   single(): this {
+    this.queue.record("single", []);
     return this;
   }
   maybeSingle(): this {
+    this.queue.record("maybeSingle", []);
     return this;
   }
 
@@ -128,13 +151,16 @@ class MockQueryBuilder implements PromiseLike<QueuedResult> {
 class MockStorageBucket {
   constructor(private readonly bucket: string, private readonly storage: MockStorage) {}
 
-  async upload(path: string, _body: unknown, _options?: unknown) {
+  async upload(path: string, body: unknown, options?: unknown) {
+    this.storage.record(this.bucket, "upload", [path, body, options]);
     return this.storage.popUpload(this.bucket, path);
   }
   async remove(paths: string[]) {
+    this.storage.record(this.bucket, "remove", [paths]);
     return this.storage.popRemove(this.bucket, paths);
   }
-  async createSignedUrl(path: string, _expiresIn: number) {
+  async createSignedUrl(path: string, expiresIn: number) {
+    this.storage.record(this.bucket, "createSignedUrl", [path, expiresIn]);
     return this.storage.popSignedUrl(this.bucket, path);
   }
 }
@@ -143,6 +169,7 @@ class MockStorage {
   private uploadQueue: QueuedResult[] = [];
   private removeQueue: QueuedResult[] = [];
   private signedUrlQueue: QueuedResult[] = [];
+  private callLog = new Map<string, RecordedCall[]>();
 
   from(bucket: string) {
     return new MockStorageBucket(bucket, this);
@@ -166,6 +193,17 @@ class MockStorage {
   }
   popSignedUrl(_bucket: string, _path: string) {
     return this.signedUrlQueue.shift() ?? emptyResult();
+  }
+
+  record(bucket: string, method: string, args: unknown[]) {
+    const log = this.callLog.get(bucket) ?? [];
+    log.push({ method, args });
+    this.callLog.set(bucket, log);
+  }
+
+  /** All `upload`/`remove`/`createSignedUrl` calls made against this bucket, in call order. */
+  calls(bucket: string): RecordedCall[] {
+    return this.callLog.get(bucket) ?? [];
   }
 }
 
@@ -252,6 +290,14 @@ export class MockSupabaseClient {
     return new MockQueryBuilder(this.tableQueue(table));
   }
 
+  /** All builder method calls (`.eq()`, `.insert()`, `.update()`, ...) made against this
+   * table across every `.from(table)` chain so far, in call order. Use this to assert on
+   * exactly what payload a route sent, e.g.
+   * `supabase.queryCalls("content_blocks").find((c) => c.method === "update")?.args[0]`. */
+  queryCalls(table: string): RecordedCall[] {
+    return this.tableQueue(table).calls;
+  }
+
   async rpc(name: string, _params?: Record<string, unknown>) {
     const queue = this.rpcs.get(name);
     const next = queue?.shift();
@@ -267,4 +313,14 @@ export class MockSupabaseClient {
 
 export function createMockSupabaseClient() {
   return new MockSupabaseClient();
+}
+
+/**
+ * Cast a `MockSupabaseClient` to the real `SupabaseClient` type, for handing to
+ * `mockReturnValue`/`mockResolvedValue` on a `vi.mock("@/lib/supabase/admin" | "/server")`
+ * factory. The mock only implements the subset of the real client's shape this codebase
+ * actually calls (see the module docblock above), so this is an intentional structural cast.
+ */
+export function asSupabaseClient(client: MockSupabaseClient): SupabaseClient {
+  return client as unknown as SupabaseClient;
 }
