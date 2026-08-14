@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -69,12 +70,12 @@ export default function AccessDeniedPage() {
             {isLoading ? "Signing out..." : "Sign Out"}
           </button>
 
-          <a
+          <Link
             href="/"
             className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium inline-block"
           >
             Go Home
-          </a>
+          </Link>
         </div>
 
         <p className="mt-8 text-xs text-zinc-400 dark:text-zinc-600">

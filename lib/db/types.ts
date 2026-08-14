@@ -135,8 +135,8 @@ export interface FeedbackResponse {
   responder_id: string;
   request_id: string;
   created_at: string;
-  metadata: Record<string, any>;
-  content: Record<string, any>;
+  metadata: Record<string, string>;
+  content: Record<string, string>;
   sentiment_score: number | null;
   is_flagged: boolean;
   flag_reason: string | null;

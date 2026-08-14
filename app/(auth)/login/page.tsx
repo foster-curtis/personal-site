@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -157,12 +158,12 @@ function LoginForm() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-800">
-          <a
+          <Link
             href="/"
             className="block text-center text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300"
           >
             &larr; Back to Home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
