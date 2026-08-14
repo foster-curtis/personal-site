@@ -8,6 +8,69 @@ currently nothing to migrate a local Postgres instance into, since `content_bloc
 loosely on [01-test-runner-foundation.md](01-test-runner-foundation.md) for the `db`
 Vitest project. Requires Docker (confirmed available).
 
+## Known issue: migration 004 breaks a fresh `supabase start`
+
+Phase 00 captured the live schema into `005_content_core.sql` (creates `content_blocks`
+and friends), but `004_content_blocks_important.sql` — which predates `005` and already
+existed before Phase 00 — does `ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS
+is_important ...`. On the hosted project this was always fine because `content_blocks`
+was created out-of-band (manually, before any migration existed). On a **genuinely fresh
+database** (which is exactly what `supabase start` bootstraps), migrations apply in
+filename order — `001, 002, 003, 004, 005, 006, 007` — so `004` runs before `005` has
+created the table it's altering, and fails with `relation "content_blocks" does not
+exist`.
+
+This was confirmed directly: both `supabase db pull` and `supabase db diff` build a
+shadow database by replaying every local migration in order, and both hit this exact
+error at `004` (see Phase 00's commit `efe3338` for the full repro). It is **not**
+something Phase 00 introduced — `004` always assumed `content_blocks` already existed;
+Phase 00 just made that assumption visible for the first time by adding the migration
+that actually creates the table.
+
+**Validated workaround order:** replaying `001, 002, 003, 005, 006, 007, 004` (i.e. `004`
+last) against a scratch Postgres container built from `supabase/postgres:17.6.1.063`
+applied cleanly end-to-end, and `004` landed as a true no-op (`NOTICE: column
+"is_important" of relation "content_blocks" already exists, skipping`) since `005`
+already creates the column. `content_blocks`'s resulting structure (columns, indexes,
+FKs, RLS policies) matched the live project exactly.
+
+**This phase needs to resolve the ordering before `supabase start` will work.** The
+CLI always replays migrations in filename order with no way to override that, so pick one
+of these:
+
+- **Recommended — guard `004`, touch nothing else.** Wrap its `ALTER TABLE` so it's a
+  no-op when the table doesn't exist yet:
+  ```sql
+  DO $$ BEGIN
+    IF to_regclass('public.content_blocks') IS NOT NULL THEN
+      ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS is_important BOOLEAN NOT NULL DEFAULT false;
+      UPDATE content_blocks SET is_important = true WHERE type = 'resume';
+    END IF;
+  END $$;
+  ```
+  On a fresh database, `004` runs before `005` and now just quietly does nothing (instead
+  of erroring); `005`'s own `CREATE TABLE` already includes `is_important` as a column, so
+  nothing is lost. On the hosted project, `content_blocks` already exists, so this behaves
+  exactly as `004` always did. No renumbering, no rewritten history, no change to the
+  hosted project's applied-migrations tracking.
+- **Alternative — renumber so schema-creation sorts before `004`.** Rename
+  `005_content_core.sql` (and the two that follow it) to something that sorts between
+  `003` and `004` — the CLI sorts migrations lexically by filename, not semantically, so
+  this is legal. Rewrites filenames Phase 00 already committed for no real benefit over
+  the guard above; only worth it if you have another reason to want schema-creation
+  numbered ahead of `004`.
+- **Alternative — squash `004` into `005` and delete `004`.** `005` already includes
+  `is_important` in its `CREATE TABLE`, so `004` becomes fully redundant once squashed.
+  This rewrites migration history, which Phase 00 was told not to do for the *hosted*
+  project's sake (its tracking table already has version `004` marked applied) — but a
+  fresh local stack doesn't care about that history, only the hosted project does. If you
+  go this route, don't touch the hosted project's applied-migrations tracking, only local
+  replay behavior.
+
+Whichever fix you pick, confirm it by running `supabase db reset` (or equivalent fresh
+`supabase start`) and watching all migrations apply without error in one pass — that's the
+real acceptance bar, not just the validated manual reorder above.
+
 ## Context
 
 `personal-site` is a Next.js/TypeScript AI-powered interactive resume backed by Supabase
@@ -22,6 +85,10 @@ excluded from the default `npm test` run so the main suite stays fast, offline, 
 Docker-free.
 
 ## Setup
+
+Apply the migration-004 fix from "Known issue" above **before** running `supabase start`
+for the first time — otherwise this fails partway through with `relation "content_blocks"
+does not exist`.
 
 ```bash
 npx supabase init      # safe to run even with existing migrations present
