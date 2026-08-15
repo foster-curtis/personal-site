@@ -1,0 +1,331 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Powers the generation-eval job's nightly run (see its own `if:` below). Every other
+  # job is skipped on a schedule trigger so the cron doesn't burn a full build+e2e run for
+  # no reason.
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC, adjust as preferred
+  # Lets any job (including generation-eval) be re-run on demand from the Actions tab.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22" # Next.js 16's documented minimum is 20.9+; 22 is closer to what
+  # Vercel actually runs and is required by @testing-library/jest-dom v7. Deliberately not
+  # matrixed against other Node versions -- solo project, single deployment runtime, so an
+  # OS/Node matrix would triple CI minutes for near-zero signal (see plans/08-ci-pipeline.md).
+
+jobs:
+  # ---------------------------------------------------------------------------------------
+  # Required: lint, tsc --noEmit, and the offline unit/api/component suite.
+  #
+  # typecheck runs as its own step deliberately -- Turbopack (default bundler since Next.js
+  # 16) does not typecheck during `next build` the way the old Webpack path historically
+  # did, so a real type error can currently pass a green build silently without this step.
+  # ---------------------------------------------------------------------------------------
+  quality:
+    name: Lint, typecheck, unit/api/component tests
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache npm and Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit / API / component tests (with coverage)
+        run: npm test -- --coverage
+
+  # ---------------------------------------------------------------------------------------
+  # Required: production build with placeholder env vars. The app isn't deployed yet, so
+  # there's no real project to build against in CI -- these mirror the fake values
+  # tests/setup/env.ts and playwright.config.ts's APP_ENV already use for the same reason.
+  # ---------------------------------------------------------------------------------------
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      GEMINI_API_KEY: placeholder-gemini-key
+      GEMINI_MODEL: gemini-2.5-flash
+      OWNER_EMAIL: owner@example.com
+      OWNER_NAME: Placeholder Owner
+      NEXT_PUBLIC_OWNER_NAME: Placeholder Owner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache npm and Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  # ---------------------------------------------------------------------------------------
+  # Required: Playwright smoke suite (Phase 05) against a production build.
+  #
+  # playwright.config.ts's webServer already runs `npm run build && npm run start` itself
+  # with its own hermetic fake env (APP_ENV) and spins up a mock GoTrue server for the auth
+  # guard test, so this job doesn't need to build separately or pass env vars -- just
+  # `npm run test:e2e`.
+  #
+  # Deferred to actual deployment (documented here now per plans/08-ci-pipeline.md so these
+  # aren't rediscovered the hard way later): once the site is deployed, switch this job to
+  # run against Vercel preview deployments instead of a locally built server --
+  #   1. Trigger off the `deployment_status` GitHub event (no polling needed) or a
+  #      wait-for-preview action; read the preview URL from
+  #      `github.event.deployment_status.environment_url`.
+  #   2. Vercel preview URLs are auth-gated by default (Deployment Protection). Use a
+  #      "Protection Bypass for Automation" secret from the Vercel project settings, sent as
+  #      BOTH the `x-vercel-protection-bypass` header AND
+  #      `x-vercel-set-bypass-cookie: true`. Skipping the cookie header means only the very
+  #      first request per test actually bypasses the login wall -- every later in-browser
+  #      navigation in that same test hangs on the protection challenge.
+  # ---------------------------------------------------------------------------------------
+  e2e:
+    name: Playwright E2E (production build)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache npm and Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Only the browser binaries are cacheable -- system deps (apt packages) aren't
+      # persisted across jobs since every run gets a fresh runner VM either way.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium + OS deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS deps only (browser cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Run E2E suite
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------------------
+  # Blocking-eligible per plans/07-rag-evals.md and evals/README.md: recall@5 over the
+  # golden question set, no generation call involved (embeddings only), so it's cheap
+  # enough to run on every PR.
+  #
+  # NOT yet added to branch protection / required checks -- Phase 07 is still in progress,
+  # and retrieval-quality.eval.ts's fixture seeding
+  # (evals/helpers/knowledge-base-seed.ts) needs an existing auth.users row for
+  # OWNER_EMAIL, which a bare `supabase start` in CI doesn't have and nothing in the repo
+  # yet scripts the creation of. Until that's solved, this job is expected to fail at the
+  # "no auth user found for OWNER_EMAIL" step -- kept non-blocking (continue-on-error) so
+  # that expected failure doesn't gate merges.
+  # TODO: once Phase 07 lands and CI-side owner-user bootstrapping exists, drop
+  # continue-on-error and add this job to main's required status checks alongside quality,
+  # build, and e2e.
+  # ---------------------------------------------------------------------------------------
+  retrieval-eval:
+    name: Retrieval quality eval (recall@5)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start --exclude studio,inbucket,imgproxy
+
+      - name: Export local Supabase credentials
+        id: supabase
+        run: |
+          STATUS=$(supabase status -o json)
+          echo "api_url=$(echo "$STATUS" | jq -r '.API_URL')" >> "$GITHUB_OUTPUT"
+          echo "anon_key=$(echo "$STATUS" | jq -r '.ANON_KEY')" >> "$GITHUB_OUTPUT"
+          echo "service_role_key=$(echo "$STATUS" | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_OUTPUT"
+
+      - name: Run retrieval-quality eval (threshold 80)
+        working-directory: evals
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ steps.supabase.outputs.api_url }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ steps.supabase.outputs.anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase.outputs.service_role_key }}
+          OWNER_EMAIL: ci-eval-owner@example.com
+        run: npx evalite run retrieval-quality.eval.ts --threshold 80
+
+  # ---------------------------------------------------------------------------------------
+  # Non-blocking by design (per plans/07-rag-evals.md and plans/08-ci-pipeline.md): both
+  # answer-grounding and prompt-injection-resistance are judged/probabilistic (autoevals'
+  # Factuality scorer via Gemini), so gating merges on them just trains people to ignore red
+  # X's. Runs on the daily cron or a manual dispatch only -- never on push/pull_request.
+  #
+  # Same Phase-07-in-progress caveat as retrieval-eval above applies to answer-grounding
+  # (it also seeds a local fixture knowledge base under OWNER_EMAIL); prompt-injection-
+  # resistance additionally needs OWNER_EMAIL's real resume/story/qa content_blocks to
+  # exist, which a bare CI-local Supabase instance won't have either. Left wired up per the
+  # plan's "scaffold now, enable progressively" guidance rather than left out entirely.
+  # ---------------------------------------------------------------------------------------
+  generation-eval:
+    name: Generation quality evals (answer grounding + prompt injection)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start --exclude studio,inbucket,imgproxy
+
+      - name: Export local Supabase credentials
+        id: supabase
+        run: |
+          STATUS=$(supabase status -o json)
+          echo "api_url=$(echo "$STATUS" | jq -r '.API_URL')" >> "$GITHUB_OUTPUT"
+          echo "anon_key=$(echo "$STATUS" | jq -r '.ANON_KEY')" >> "$GITHUB_OUTPUT"
+          echo "service_role_key=$(echo "$STATUS" | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_OUTPUT"
+
+      - name: Run answer-grounding and prompt-injection-resistance evals
+        working-directory: evals
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ steps.supabase.outputs.api_url }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ steps.supabase.outputs.anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase.outputs.service_role_key }}
+          OWNER_EMAIL: ci-eval-owner@example.com
+        run: |
+          npx evalite run answer-grounding.eval.ts
+          npx evalite run prompt-injection-resistance.eval.ts
+
+  # ---------------------------------------------------------------------------------------
+  # Non-blocking (per plans/06-db-integration.md and plans/08-ci-pipeline.md) until proven
+  # stable over several runs -- flaky infra-dependent jobs that are required checks are
+  # worse than not having the job at all, since people learn to ignore or force-merge past
+  # them. Self-contained: pgTAP's tests.create_supabase_user() (supabase/tests/00000_*.sql)
+  # creates its own fake auth users, so this needs no external secrets.
+  # ---------------------------------------------------------------------------------------
+  db:
+    name: pgTAP RLS / match_embeddings tests
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start --exclude studio,inbucket,imgproxy
+
+      - name: Run pgTAP suite
+        run: supabase test db
