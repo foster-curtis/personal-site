@@ -17,3 +17,5 @@ export const FeedbackAnalysisOutputSchema = z.object({
     })
   ),
 });
+
+export type FeedbackAnalysisOutput = z.infer<typeof FeedbackAnalysisOutputSchema>;

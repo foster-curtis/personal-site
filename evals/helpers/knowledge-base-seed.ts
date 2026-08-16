@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "../../lib/supabase/admin";
 import { chunkText, embedText } from "../../lib/gemini/client";
 import { assertLocalSupabase } from "./local-db-guard";
+import { withRetry } from "./with-retry";
 import { EVAL_KNOWLEDGE_BASE } from "../fixtures/knowledge-base";
 
 // Every seeded row's title starts with this, so seed/teardown can find "our" rows without
@@ -86,7 +87,9 @@ export async function seedKnowledgeBase(): Promise<Map<string, string>> {
 
     const chunks = chunkText(fixture.bodyText);
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-      const embedding = await embedText(chunks[chunkIndex]);
+      const embedding = await withRetry(() => embedText(chunks[chunkIndex]), {
+        label: `embed chunk ${chunkIndex} of "${fixture.key}"`,
+      });
       const { error: embedError } = await supabase.from("content_embeddings").insert({
         content_block_id: block.id,
         chunk_index: chunkIndex,

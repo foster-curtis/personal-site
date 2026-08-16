@@ -40,3 +40,5 @@ export const JobCompareAnalysisSchema = z.object({
     interviewFocus: z.array(z.string()),
   }),
 });
+
+export type JobCompareAnalysis = z.infer<typeof JobCompareAnalysisSchema>;

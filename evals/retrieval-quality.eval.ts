@@ -1,6 +1,7 @@
 import { evalite } from "evalite";
 import { getBlockMetadata, prioritizeChunks, retrieveRelevantChunks } from "../lib/rag";
 import { seedKnowledgeBase } from "./helpers/knowledge-base-seed";
+import { withRetry } from "./helpers/with-retry";
 import { GOLDEN_QUESTIONS } from "./fixtures/golden-questions";
 
 /**
@@ -39,7 +40,9 @@ evalite("retrieval quality - recall@5", {
   task: async (question: string): Promise<string[]> => {
     // Mirrors app/api/chat/route.ts's retrieval steps exactly (retrieve 10 candidates,
     // prioritize down to the 5 actually used) so this eval tracks the real production path.
-    const allChunks = await retrieveRelevantChunks(question, 10, 0.3);
+    const allChunks = await withRetry(() => retrieveRelevantChunks(question, 10, 0.3), {
+      label: `retrieve chunks for "${question}"`,
+    });
     const blockIds = [...new Set(allChunks.map((c) => c.content_block_id))];
     const blockMetadata = await getBlockMetadata(blockIds);
     const top5 = prioritizeChunks(allChunks, blockMetadata, 5);

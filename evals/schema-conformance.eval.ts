@@ -2,6 +2,7 @@ import { evalite } from "evalite";
 import { POST } from "../app/api/job-compare/route";
 import { jsonRequest } from "./helpers/next-request";
 import { JobCompareAnalysisSchema } from "./helpers/job-compare-schema";
+import { withRetry } from "./helpers/with-retry";
 import { JOB_DESCRIPTIONS } from "./fixtures/job-descriptions";
 
 /**
@@ -30,14 +31,20 @@ evalite("schema conformance - job-compare", {
       input: jobDescription,
       expected: true,
     })),
-  task: async (jobDescription: string): Promise<{ analysis: unknown }> => {
-    const res = await POST(jsonRequest("/api/job-compare", { jobDescription }));
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(`evals/: /api/job-compare returned ${res.status}: ${JSON.stringify(body)}`);
-    }
-    return body;
-  },
+  task: async (jobDescription: string): Promise<{ analysis: unknown }> =>
+    withRetry(
+      async () => {
+        const res = await POST(jsonRequest("/api/job-compare", { jobDescription }));
+        const body = await res.json();
+        if (!res.ok) {
+          throw new Error(
+            `evals/: /api/job-compare returned ${res.status}: ${JSON.stringify(body)}`
+          );
+        }
+        return body;
+      },
+      { label: "/api/job-compare" }
+    ),
   scorers: [
     {
       name: "schema-conformance",

@@ -3,6 +3,7 @@ import { Factuality } from "autoevals";
 import { POST } from "../app/api/chat/route";
 import { jsonRequest } from "./helpers/next-request";
 import { seedKnowledgeBase } from "./helpers/knowledge-base-seed";
+import { withRetry } from "./helpers/with-retry";
 import { JUDGE_MODEL } from "./helpers/gemini-openai-client";
 import { NO_CONTEXT_QUESTIONS } from "./fixtures/no-context-questions";
 
@@ -36,15 +37,22 @@ evalite("answer grounding - declines when context is missing", {
       expected: HEDGE_REFERENCE_ANSWER,
     }));
   },
-  task: async (question: string): Promise<string> => {
-    const res = await POST(jsonRequest("/api/chat", { message: question }));
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(`evals/: /api/chat returned ${res.status}: ${JSON.stringify(body)}`);
-    }
-    return body.response as string;
-  },
+  task: async (question: string): Promise<string> =>
+    withRetry(
+      async () => {
+        const res = await POST(jsonRequest("/api/chat", { message: question }));
+        const body = await res.json();
+        if (!res.ok) {
+          throw new Error(`evals/: /api/chat returned ${res.status}: ${JSON.stringify(body)}`);
+        }
+        return body.response as string;
+      },
+      { label: `/api/chat for "${question}"` }
+    ),
   scorers: [
-    (opts) => Factuality({ ...opts, model: JUDGE_MODEL }),
+    (opts) =>
+      withRetry(() => Promise.resolve(Factuality({ ...opts, model: JUDGE_MODEL })), {
+        label: "Factuality judge",
+      }),
   ],
 });

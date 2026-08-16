@@ -3,17 +3,27 @@
  * missing. Evals call real Gemini and (for retrieval-quality) a real Supabase project —
  * never the fake sentinel values `tests/setup/env.ts` uses for the mocked unit/api/component
  * suite (see docs/dev-setup.md for how to populate `.env.local`).
+ *
+ * `loadEnvLocal` is exported separately from the validation below because Vitest's
+ * `globalSetup` (helpers/global-setup.ts) runs in a different process from `setupFiles` —
+ * this file's top-level validation only runs for workers that actually execute eval files,
+ * not for the orchestrating process that runs globalSetup's teardown. That teardown needs
+ * .env.local loaded too (it calls the same Supabase-touching code), so it imports and calls
+ * `loadEnvLocal()` itself rather than relying on this module's side effect.
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const envLocalPath = path.join(repoRoot, ".env.local");
-
-if (existsSync(envLocalPath)) {
-  process.loadEnvFile(envLocalPath);
+export function loadEnvLocal(): void {
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const envLocalPath = path.join(repoRoot, ".env.local");
+  if (existsSync(envLocalPath)) {
+    process.loadEnvFile(envLocalPath);
+  }
 }
+
+loadEnvLocal();
 
 const REQUIRED_ENV_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
