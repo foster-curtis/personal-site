@@ -1,5 +1,41 @@
-import { describe, it, expect } from "vitest";
-import { chunkText } from "@/lib/gemini/client";
+import { describe, it, expect, vi } from "vitest";
+
+const embedContentMock = vi.fn();
+const getGenerativeModelMock = vi.fn(() => ({ embedContent: embedContentMock }));
+
+vi.mock("@google/generative-ai", () => ({
+  GoogleGenerativeAI: class {
+    getGenerativeModel = getGenerativeModelMock;
+  },
+}));
+
+import { chunkText, embedText } from "@/lib/gemini/client";
+
+// Regression test: text-embedding-004 (the model this used previously) was retired by
+// Google and started 404ing — confirmed against the live API's ListModels. Pins the
+// replacement model and the outputDimensionality param that keeps its output compatible
+// with the existing content_embeddings.embedding vector(768) column.
+describe("embedText", () => {
+  it("requests gemini-embedding-001 with outputDimensionality 768", async () => {
+    embedContentMock.mockResolvedValue({ embedding: { values: [0.1, 0.2, 0.3] } });
+
+    await embedText("hello world");
+
+    expect(getGenerativeModelMock).toHaveBeenCalledWith({ model: "gemini-embedding-001" });
+    expect(embedContentMock).toHaveBeenCalledWith({
+      content: { role: "user", parts: [{ text: "hello world" }] },
+      outputDimensionality: 768,
+    });
+  });
+
+  it("returns the embedding values from the response", async () => {
+    embedContentMock.mockResolvedValue({ embedding: { values: [1, 2, 3] } });
+
+    const result = await embedText("hello world");
+
+    expect(result).toEqual([1, 2, 3]);
+  });
+});
 
 describe("chunkText", () => {
   it("splits on blank-line-separated paragraphs and drops blank paragraphs", () => {

@@ -93,7 +93,7 @@ should be meaningful (at least one required).
 For each targeted block: combines `title + body_text`, chunks it
 (`chunkText`, ~1000 chars/chunk, paragraph→sentence→word fallback),
 **deletes all existing embeddings for that block**, then generates and
-inserts a fresh embedding per chunk via Gemini `text-embedding-004`.
+inserts a fresh embedding per chunk via Gemini `gemini-embedding-001`.
 Per-chunk failures are logged and skipped rather than aborting the whole
 sync.
 

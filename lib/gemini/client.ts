@@ -1,4 +1,15 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, type EmbedContentRequest } from "@google/generative-ai";
+
+// The installed SDK (@google/generative-ai) predates gemini-embedding-001's
+// outputDimensionality param, so its EmbedContentRequest type doesn't declare it — but the
+// SDK's embedContent() just JSON.stringifies whatever object it's given (no field
+// whitelisting), so extending the type and passing a non-literal value (avoiding TS's
+// excess-property check) gets it through correctly. Confirmed against the live API: this
+// value must stay 768 to match content_embeddings.embedding vector(768) in the DB schema.
+interface EmbedContentRequestWithDimensionality extends EmbedContentRequest {
+  outputDimensionality?: number;
+}
+const EMBEDDING_DIMENSIONS = 768;
 
 // Initialize the Gemini client
 function getClient() {
@@ -53,14 +64,22 @@ Please answer the user's question based only on the provided context. If the con
 
 /**
  * Generate embeddings for text using Gemini Embedding API
- * Returns a vector of 768 dimensions (using text-embedding-004)
+ * Returns a vector of 768 dimensions (using gemini-embedding-001)
  */
 export async function embedText(text: string): Promise<number[]> {
   const genAI = getClient();
-  // Using text-embedding-004 which outputs 768 dimensions by default
-  const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+  // text-embedding-004 (the model this used previously) has been retired — confirmed via
+  // the live API's ListModels that it no longer supports embedContent. gemini-embedding-001
+  // defaults to 3072 dimensions; outputDimensionality truncates it (Matryoshka
+  // representation) to keep compatibility with the existing vector(768) column instead of
+  // requiring a schema migration.
+  const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
-  const result = await model.embedContent(text);
+  const request: EmbedContentRequestWithDimensionality = {
+    content: { role: "user", parts: [{ text }] },
+    outputDimensionality: EMBEDDING_DIMENSIONS,
+  };
+  const result = await model.embedContent(request);
   return result.embedding.values;
 }
 

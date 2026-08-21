@@ -57,7 +57,7 @@ Chunked, embedded text for RAG retrieval.
 | `content_block_id` | uuid | FK to `content_blocks` |
 | `chunk_index` | int | position within the block |
 | `chunk_text` | text | |
-| `embedding` | vector(768) | Gemini `text-embedding-004` output |
+| `embedding` | vector(768) | Gemini `gemini-embedding-001` output, truncated to 768 dims via `outputDimensionality` (was `text-embedding-004` until that model was retired — see [ai-pipeline.md](./ai-pipeline.md)) |
 | `created_at` | timestamptz | |
 
 Written/deleted exclusively via the admin client in `app/api/embed/route.ts`

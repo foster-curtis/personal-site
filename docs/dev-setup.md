@@ -42,7 +42,7 @@ in real values. Full reference:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **yes** | yes | Supabase anon key, same failure mode as above |
 | `SUPABASE_SERVICE_ROLE_KEY` | **yes**, for any public/admin route | no | Powers `createAdminClient()` — required for chat, about, job-compare, feedback public routes, embedding sync. Treat as a secret with full DB access. |
 | `GEMINI_API_KEY` | **yes**, for any AI feature | no | Throws (at call time, not startup) if unset when an LLM call is attempted |
-| `GEMINI_MODEL` | no (default `gemini-2.5-flash`) | no | Generation model only — embeddings are hardcoded to `text-embedding-004` regardless of this var |
+| `GEMINI_MODEL` | no (default `gemini-2.5-flash`) | no | Generation model only — embeddings are hardcoded to `gemini-embedding-001` (truncated to 768 dims via `outputDimensionality`) regardless of this var |
 | `OWNER_EMAIL` | **yes** | no | The single account treated as the owner (`isOwner()`). Also used to resolve "the owner" user id in `job-compare` and `owner/resume` routes. |
 | `OWNER_NAME` | no | no | Display name fallback in About-page and feedback-analysis prompts. Different call sites default differently (`"Foster Curtis"` in About, `"the candidate"` in feedback analysis) if unset. |
 | `NEXT_PUBLIC_OWNER_NAME` | no | yes | Display name fallback used client-side (references page, feedback form, `getOwnerDisplayName()`). Keep in sync with `OWNER_NAME` — they're two separate vars for the same concept, one server- one client-readable. |

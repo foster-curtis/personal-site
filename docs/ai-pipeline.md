@@ -12,7 +12,7 @@ exported functions.
 |---|---|---|
 | `generateContent(prompt)` | `GEMINI_MODEL` env or `gemini-2.5-flash` | Raw text generation, one-shot prompt in, string out |
 | `generateWithContext(systemPrompt, context, userMessage)` | same | Wraps the three parts into one templated prompt for chat |
-| `embedText(text)` | hardcoded `text-embedding-004` | Returns a 768-dim vector. **Not affected by `GEMINI_MODEL`** — the embedding model is separate from the generation model and isn't configurable via env. |
+| `embedText(text)` | hardcoded `gemini-embedding-001` | Returns a 768-dim vector (the model defaults to 3072; `outputDimensionality: 768` truncates it via Matryoshka representation to match the DB's `vector(768)` column). **Not affected by `GEMINI_MODEL`** — the embedding model is separate from the generation model and isn't configurable via env. Was `text-embedding-004` until Google retired that model and it started 404ing — confirmed against the live API. |
 | `embedTexts(texts[])` | same | Sequential (not parallel) calls, to avoid hitting rate limits |
 | `chunkText(text, maxChunkLength=1000)` | n/a | Paragraph → sentence → word fallback splitter, pure string logic, no API call |
 
@@ -74,6 +74,13 @@ Key behaviors worth knowing before touching this:
   2-responder floor, not similarity-matched to the question.
 
 ## Embedding sync (`app/api/embed/route.ts`)
+
+> **If you're reading this after the `text-embedding-004` → `gemini-embedding-001` switch:**
+> the two models produce numerically incompatible vectors even at the same 768 dimensions —
+> cosine similarity between an old and a new embedding is meaningless. Run a full resync
+> (dashboard `SyncButton`, `sync_all: true`) once after deploying that change so every
+> `content_embeddings` row comes from the same model; otherwise `match_embeddings` silently
+> mixes the two and retrieval quality degrades without erroring.
 
 Not automatic on every content change — it's triggered by:
 - The dashboard `SyncButton` (`sync_all: true`) — full resync of every
