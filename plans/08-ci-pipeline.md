@@ -19,14 +19,14 @@ AI-powered interactive resume, **not yet deployed**. It currently has no CI at a
 
 Create `.github/workflows/ci.yml`, triggered on push and pull request to `main`.
 
-| Job | Contents | Blocking? |
-|---|---|---|
-| `quality` | `npm ci`, `npm run lint`, `npm run typecheck`, `npm test -- --coverage` | ✅ required |
-| `build` | `npm run build` with dummy/placeholder env vars | ✅ required |
-| `e2e` | Playwright (Phase 05), against the production build, with browser install caching | ✅ required |
-| `retrieval-eval` | The recall@5 golden-set check from Phase 07 — cheap, no generation call involved | ✅ required |
-| `db` | `supabase start` + `supabase test db` / `npm run test:db` (Phase 06) | non-blocking until it proves stable in CI |
-| `generation-eval` | The `autoevals`-graded answer-grounding and prompt-injection checks from Phase 07 | nightly cron only, non-blocking |
+| Job               | Contents                                                                          | Blocking?                                 |
+| ----------------- | --------------------------------------------------------------------------------- | ----------------------------------------- |
+| `quality`         | `npm ci`, `npm run lint`, `npm run typecheck`, `npm test -- --coverage`           | ✅ required                               |
+| `build`           | `npm run build` with dummy/placeholder env vars                                   | ✅ required                               |
+| `e2e`             | Playwright (Phase 05), against the production build, with browser install caching | ✅ required                               |
+| `retrieval-eval`  | The recall@5 golden-set check from Phase 07 — cheap, no generation call involved  | ✅ required                               |
+| `db`              | `supabase start` + `supabase test db` / `npm run test:db` (Phase 06)              | non-blocking until it proves stable in CI |
+| `generation-eval` | The `autoevals`-graded answer-grounding and prompt-injection checks from Phase 07 | weekly cron only, non-blocking            |
 
 ### Node version
 
@@ -89,8 +89,8 @@ force-merge past them.
 ```yaml
 on:
   schedule:
-    - cron: '0 6 * * *'  # daily, adjust as preferred
-  workflow_dispatch: {}   # allow manual trigger too
+    - cron: "0 6 * * *" # daily, adjust as preferred
+  workflow_dispatch: {} # allow manual trigger too
 ```
 
 Needs real `GEMINI_API_KEY` as a repository secret. Never wire this into the `push`/
@@ -112,6 +112,7 @@ now, `e2e` runs against a locally built-and-started server in the CI runner itse
 **When the site does get deployed**, switch `e2e` to run against Vercel preview
 deployments instead. Two known gotchas to leave as a comment in the workflow file now, so
 they're not rediscovered the hard way later:
+
 1. Trigger off the `deployment_status` GitHub event (cleanest — no polling needed) or use
    a wait-for-preview action; read the preview URL from
    `github.event.deployment_status.environment_url`.
