@@ -1,0 +1,20 @@
+# Dependabot over Renovate deliberately (see plans/09-devops-recommendations.md): this is a
+# single-package GitHub repo with no monorepo/workspace structure, which is exactly the case
+# Dependabot handles zero-config. Renovate only wins once there's a monorepo or a need for
+# finer-grained update-scheduling policy.
+#
+# These PRs are gated by CI the same way any other PR is -- .github/workflows/ci.yml runs on
+# `pull_request` against main, so quality / build / e2e all run on each update PR. Making
+# them *blocking* is a branch-protection setting (Settings -> Rules/Branches -> required
+# status checks), not something this file can express.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # One PR per week for all minor/patch bumps instead of a dozen. Majors still come
+      # through as individual PRs, which is what you want -- they need reading.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
