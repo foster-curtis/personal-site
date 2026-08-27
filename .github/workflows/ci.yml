@@ -5,11 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Powers the generation-eval job's nightly run (see its own `if:` below). Every other
+  # Powers the generation-eval job's weekly run (see its own `if:` below). Every other
   # job is skipped on a schedule trigger so the cron doesn't burn a full build+e2e run for
   # no reason.
   schedule:
-    - cron: "0 6 * * *" # daily 06:00 UTC, adjust as preferred
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC, adjust as preferred
   # Lets any job (including generation-eval) be re-run on demand from the Actions tab.
   workflow_dispatch: {}
 
@@ -250,7 +250,7 @@ jobs:
   # Non-blocking by design (per plans/07-rag-evals.md and plans/08-ci-pipeline.md): both
   # answer-grounding and prompt-injection-resistance are judged/probabilistic (autoevals'
   # Factuality scorer via Gemini), so gating merges on them just trains people to ignore red
-  # X's. Runs on the daily cron or a manual dispatch only -- never on push/pull_request.
+  # X's. Runs on the weekly cron or a manual dispatch only -- never on push/pull_request.
   #
   # Same Phase-07-in-progress caveat as retrieval-eval above applies to answer-grounding
   # (it also seeds a local fixture knowledge base under OWNER_EMAIL); prompt-injection-
